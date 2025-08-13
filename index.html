@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Simulator</title>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+        }
+        #account {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-weight: bold;
+            background-color: white;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #chart {
+            width: 100vw;
+            height: 50vh;
+        }
+        .buttons {
+            text-align: center;
+            margin: 10px 0;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        #trades {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        #trades th, #trades td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: right;
+        }
+        #trades th {
+            background-color: #eee;
+        }
+        #trades td {
+            background-color: white;
+        }
+    </style>
+</head>
+<body>
+    <div id="account">Account: $1000.00</div>
+    <div id="chart"></div>
+    <div class="buttons">
+        <button id="next">Next Day</button>
+        <button id="buy">Buy</button>
+        <button id="sell">Sell</button>
+    </div>
+    <table id="trades">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Open Date</th>
+                <th>Buy Price</th>
+                <th>Shares</th>
+                <th>Close Date</th>
+                <th>Sell Price</th>
+                <th>P/L</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <script>
+        const { createChart } = LightweightCharts;
+        const chart = createChart(document.getElementById('chart'), {
+            width: window.innerWidth,
+            height: Math.floor(window.innerHeight / 2),
+            layout: { background: { type: 'solid', color: '#ffffff' } },
+            grid: { vertLines: { color: '#e0e0e0' }, horLines: { color: '#e0e0e0' } },
+        });
+        const candleSeries = chart.addCandlestickSeries({
+            upColor: '#00ff00',
+            downColor: '#ff0000',
+            borderDownColor: '#ff0000',
+            borderUpColor: '#00ff00',
+            wickDownColor: '#ff0000',
+            wickUpColor: '#00ff00',
+        });
+
+        // Generate fake Tesla data for 365 days
+        function generateData(days) {
+            const data = [];
+            let date = new Date('2023-01-01');
+            let price = 200;
+            for (let i = 0; i < days; i++) {
+                const open = price;
+                const change = (Math.random() - 0.5) * 10;
+                const close = open + change;
+                const high = Math.max(open, close) + Math.random() * 5;
+                const low = Math.min(open, close) - Math.random() * 5;
+                data.push({
+                    time: date.toISOString().split('T')[0],
+                    open: Math.max(open, 0.01),
+                    high: Math.max(high, 0.01),
+                    low: Math.max(low, 0.01),
+                    close: Math.max(close, 0.01)
+                });
+                price = close;
+                date.setDate(date.getDate() + 1);
+            }
+            return data;
+        }
+
+        const allData = generateData(365);
+        const visibleDays = 90;
+        const startIndex = Math.floor(Math.random() * (allData.length - visibleDays));
+        let currentIndex = startIndex + visibleDays - 1;
+
+        function updateChart() {
+            const visData = allData.slice(currentIndex - visibleDays + 1, currentIndex + 1);
+            candleSeries.setData(visData);
+            chart.timeScale().fitContent();
+        }
+
+        updateChart();
+
+        let cash = 1000;
+        let position = null;
+        let tradeNumber = 1;
+        const tbody = document.querySelector('#trades tbody');
+
+        function updateAccount() {
+            const currentClose = allData[currentIndex].close;
+            const positionValue = position ? position.shares * currentClose : 0;
+            const total = cash + positionValue;
+            document.getElementById('account').innerText = `Account: $${total.toFixed(2)}`;
+        }
+
+        function updateButtons() {
+            document.getElementById('buy').disabled = !!position || cash < 1000;
+            document.getElementById('sell').disabled = !position;
+        }
+
+        function updatePL() {
+            if (position) {
+                const currentClose = allData[currentIndex].close;
+                const pl = (currentClose - position.buyPrice) * position.shares;
+                position.row.querySelector('.pl').innerText = pl.toFixed(2);
+            }
+        }
+
+        updateAccount();
+        updateButtons();
+
+        const nextAction = () => {
+            if (currentIndex < allData.length - 1) {
+                currentIndex++;
+                updateChart();
+                updateAccount();
+                updatePL();
+            }
+        };
+
+        document.getElementById('next').addEventListener('click', nextAction);
+        document.getElementById('chart').addEventListener('click', nextAction);
+
+        document.getElementById('buy').addEventListener('click', () => {
+            if (position || cash < 1000) return;
+            const investment = 1000;
+            const close = allData[currentIndex].close;
+            const shares = investment / close;
+            cash -= investment;
+            const buyDate = allData[currentIndex].time;
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${tradeNumber}</td>
+                <td>${buyDate}</td>
+                <td>${close.toFixed(2)}</td>
+                <td>${shares.toFixed(4)}</td>
+                <td class="closeDate">-</td>
+                <td class="sellPrice">-</td>
+                <td class="pl">0.00</td>
+            `;
+            tbody.appendChild(row);
+
+            position = { shares, buyPrice: close, row };
+            tradeNumber++;
+            updateAccount();
+            updateButtons();
+        });
+
+        document.getElementById('sell').addEventListener('click', () => {
+            if (!position) return;
+            const sellClose = allData[currentIndex].close;
+            const pl = (sellClose - position.buyPrice) * position.shares;
+            cash += position.shares * sellClose;
+            const sellDate = allData[currentIndex].time;
+
+            position.row.querySelector('.closeDate').innerText = sellDate;
+            position.row.querySelector('.sellPrice').innerText = sellClose.toFixed(2);
+            position.row.querySelector('.pl').innerText = pl.toFixed(2);
+
+            if (pl > 0) {
+                position.row.querySelector('.pl').style.color = 'green';
+            } else if (pl < 0) {
+                position.row.querySelector('.pl').style.color = 'red';
+            }
+
+            position = null;
+            updateAccount();
+            updateButtons();
+        });
+    </script>
+</body>
+</html>
