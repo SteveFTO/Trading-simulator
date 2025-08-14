@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trading Simulator</title>
-    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lightweight-charts/3.8.0/lightweight-charts.standalone.production.min.js"></script>
     <style>
         body {
             margin: 0;
@@ -81,6 +81,10 @@
 
     <script>
         try {
+            // Initialize chart
+            if (typeof LightweightCharts === 'undefined') {
+                throw new Error('LightweightCharts not loaded');
+            }
             const { createChart } = LightweightCharts;
             const chart = createChart(document.getElementById('chart'), {
                 width: window.innerWidth,
@@ -125,10 +129,14 @@
             const visibleDays = 90;
             const startIndex = Math.floor(Math.random() * (allData.length - visibleDays));
             let currentIndex = startIndex + visibleDays - 1;
+            let markers = []; // Store buy/sell markers
 
             function updateChart() {
                 const visData = allData.slice(currentIndex - visibleDays + 1, currentIndex + 1);
                 candleSeries.setData(visData);
+                candleSeries.setMarkers(markers.filter(marker => 
+                    visData.some(data => data.time === marker.time)
+                ));
                 chart.timeScale().fitContent();
             }
 
@@ -147,6 +155,7 @@
             }
 
             function updateButtons() {
+                // Allow buying if no position and enough cash
                 document.getElementById('buy').disabled = !!position || cash < 1000;
                 document.getElementById('sell').disabled = !position;
             }
@@ -179,8 +188,8 @@
                 const investment = 1000;
                 const close = allData[currentIndex].close;
                 const shares = investment / close;
+                const buyDate = allData[currentIndex].time; // Already a string (e.g., "2023-01-01")
                 cash -= investment;
-                const buyDate = allData[currentIndex].time;
 
                 const row = document.createElement('tr');
                 row.innerHTML = `
@@ -193,6 +202,16 @@
                     <td class="pl">0.00</td>
                 `;
                 tbody.appendChild(row);
+
+                // Add green dot for buy
+                markers.push({
+                    time: buyDate,
+                    position: 'aboveBar',
+                    color: '#00ff00',
+                    shape: 'circle',
+                    text: 'Buy'
+                });
+                updateChart();
 
                 position = { shares, buyPrice: close, row };
                 tradeNumber++;
@@ -217,13 +236,25 @@
                     position.row.querySelector('.pl').style.color = 'red';
                 }
 
+                // Add red dot for sell
+                markers.push({
+                    time: sellDate,
+                    position: 'belowBar',
+                    color: '#ff0000',
+                    shape: 'circle',
+                    text: 'Sell'
+                });
+                updateChart();
+
                 position = null;
                 updateAccount();
                 updateButtons();
             });
+
+            alert('Script initialized successfully');
         } catch (e) {
-            console.error('Chart failed to load:', e.message);
-            alert('Chart failed to load: ' + e.message);
+            console.error('Error:', e.message);
+            alert('Error: ' + e.message);
         }
     </script>
 </body>
